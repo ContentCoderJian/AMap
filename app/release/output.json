@@ -1,0 +1,1 @@
+[{"outputType":{"type":"APK"},"apkData":{"type":"FULL_SPLIT","splits":[{"filterType":"ABI","value":"armeabi"}],"versionCode":1,"versionName":"1.0","enabled":true,"filterName":"armeabi","outputFile":"app-armeabi-release.apk","fullName":"armeabiRelease","baseName":"armeabi-release","dirName":"armeabi\\"},"path":"app-armeabi-release.apk","properties":{}}]
