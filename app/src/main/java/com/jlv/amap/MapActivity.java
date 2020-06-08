@@ -1,26 +1,29 @@
 package com.jlv.amap;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.location.Location;
+import android.location.LocationManager;
 import android.os.Bundle;
-import android.os.Handler;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.amap.api.maps.AMap;
 import com.amap.api.maps.AMapOptions;
-import com.amap.api.maps.AMapUtils;
+import com.amap.api.maps.CameraUpdate;
 import com.amap.api.maps.CameraUpdateFactory;
-import com.amap.api.maps.MapView;
+import com.amap.api.maps.TextureMapView;
 import com.amap.api.maps.UiSettings;
 import com.amap.api.maps.model.BitmapDescriptorFactory;
+import com.amap.api.maps.model.CameraPosition;
 import com.amap.api.maps.model.LatLng;
 import com.amap.api.maps.model.Marker;
 import com.amap.api.maps.model.MarkerOptions;
 import com.amap.api.maps.model.MyLocationStyle;
-import com.amap.api.maps.model.NaviPara;
 import com.amap.api.maps.model.Poi;
 import com.amap.api.navi.AmapNaviPage;
 import com.amap.api.navi.AmapNaviParams;
@@ -33,35 +36,53 @@ import com.amap.api.services.geocoder.GeocodeResult;
 import com.amap.api.services.geocoder.GeocodeSearch;
 import com.amap.api.services.geocoder.RegeocodeQuery;
 import com.amap.api.services.geocoder.RegeocodeResult;
+import com.jlv.amap.view.GPSView;
 
-public class MainActivity extends CheckPermissionsActivity implements INaviInfoCallback,
+public class MapActivity extends CheckPermissionsActivity implements INaviInfoCallback,
         AMap.OnMyLocationChangeListener, AMap.OnPOIClickListener,
-        AMap.OnMarkerClickListener, GeocodeSearch.OnGeocodeSearchListener {
-    private static final float ZOOM_LEVEL = 15;
+        AMap.OnMarkerClickListener, GeocodeSearch.OnGeocodeSearchListener,
+        GPSView.OnGPSViewClickListener {
+    private static final String TAG = "MapActivity";
+    private int mCurrentGpsState = STATE_UNLOCKED;//当前定位状态
+    private static final int STATE_UNLOCKED = 0;//未定位状态，默认状态
+    private static final int STATE_LOCKED = 1;//定位状态
+    private static final int STATE_ROTATE = 2;//根据地图方向旋转状态
+    private int mZoomLevel = 16;//地图缩放级别，最大缩放级别为20
+    private static long mAnimDuartion = 500L;//地图动效时长
+    private int mMapType = MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER;//地图状态类型
 
     private AMap aMap;
-    private MapView mapView;
+    private TextureMapView textureMapView;
     private UiSettings mUiSettings;
     private MyLocationStyle myLocationStyle;
+
+    private GPSView mGpsView;
+    private View mToastView;
+    private TextView mTvToast;
 
     private String currentPositionName;
     private LatLng currentPosition;
     private Poi clickPoi;
 
     private GeocodeSearch geocoderSearch;
+    private LocationManager mLocMgr;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        mLocMgr = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         /*
          * 设置离线地图存储目录，在下载离线地图或初始化地图设置; 使用过程中可自行设置, 若自行设置了离线地图存储的路径，
          * 则需要在离线地图下载和使用地图页面都进行路径设置
          */
         // Demo中为了其他界面可以使用下载的离线地图，使用默认位置存储，屏蔽了自定义设置
         // MapsInitializer.sdcardDir =OffLineMapUtils.getSdCacheDir(this);
-        mapView = findViewById(R.id.map);
-        mapView.onCreate(savedInstanceState);// 此方法必须重写
+        textureMapView = findViewById(R.id.map);
+        textureMapView.onCreate(savedInstanceState);// 此方法必须重写
+        mGpsView = findViewById(R.id.gps_view);
+        mGpsView.setOnGPSViewClickListener(this);
+        initToast();
         initAMap();
     }
 
@@ -71,17 +92,19 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     private void initAMap() {
         if (aMap == null) {
             // 初始化显示
-            aMap = mapView.getMap();
+            aMap = textureMapView.getMap();
+            //显示实时交通
+            aMap.setTrafficEnabled(true);
             mUiSettings = aMap.getUiSettings();
-            mUiSettings.setZoomPosition(AMapOptions.ZOOM_POSITION_RIGHT_BUTTOM);
+            mUiSettings.setZoomPosition(AMapOptions.ZOOM_POSITION_RIGHT_CENTER);
             mUiSettings.setZoomControlsEnabled(true);
             mUiSettings.setScaleControlsEnabled(true);
 //            mUiSettings.setAllGesturesEnabled(true);
             // 默认显示zoom级别
-            aMap.moveCamera(CameraUpdateFactory.zoomTo(Float.valueOf(ZOOM_LEVEL)));
+            aMap.moveCamera(CameraUpdateFactory.zoomTo(Float.valueOf(mZoomLevel)));
 
             // 定位
-            mUiSettings.setMyLocationButtonEnabled(true); // 是否显示默认的定位按钮
+//            mUiSettings.setMyLocationButtonEnabled(true); // 是否显示默认的定位按钮
             aMap.addOnMyLocationChangeListener(this);
             myLocationStyle = new MyLocationStyle();//初始化定位蓝点样式类myLocationStyle.myLocationType
             // (MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE);
@@ -91,6 +114,12 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
             //定位一次，且将视角移动到地图中心点。
             aMap.setMyLocationStyle(myLocationStyle);//设置定位蓝点的Style
             aMap.setMyLocationEnabled(true); // 设置为true表示启动显示定位蓝点，false表示隐藏定位蓝点并不进行定位，默认是false。
+            if (!isGpsOpen()) {
+                showToast(getString(R.string.please_open_gps));
+            } else {
+                mCurrentGpsState = STATE_LOCKED;
+                mGpsView.setGpsState(mCurrentGpsState);
+            }
 
             // poi 点击
             aMap.setOnPOIClickListener(this);
@@ -105,13 +134,13 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     @Override
     protected void onResume() {
         super.onResume();
-        mapView.onResume();
+        textureMapView.onResume();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        mapView.onPause();
+        textureMapView.onPause();
     }
 
     /**
@@ -120,7 +149,7 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        mapView.onSaveInstanceState(outState);
+        textureMapView.onSaveInstanceState(outState);
     }
 
     /**
@@ -129,7 +158,7 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mapView.onDestroy();
+        textureMapView.onDestroy();
     }
 
     @Override
@@ -235,7 +264,7 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     @Override
     public void onMyLocationChange(Location location) {
         // 从location对象中获取经纬度信息，地址描述信息，建议拿到位置之后调用逆地理编码接口获取
-        Log.d("Amap", "location = " + location);
+        Log.d(TAG, "location = " + location);
         if (aMap.getMyLocationStyle().getMyLocationType() != MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER) {
             aMap.setMyLocationStyle(myLocationStyle.myLocationType(MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER));
         }
@@ -262,7 +291,7 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
                 ""), null, clickPoi, AmapNaviType.DRIVER);
         params.setUseInnerVoice(true);
         AmapNaviPage.getInstance().showRouteActivity(getApplicationContext(), params,
-                MainActivity.this);
+                MapActivity.this);
         aMap.clear();
         return false;
     }
@@ -301,12 +330,12 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
             if (regeocodeResult != null && regeocodeResult.getRegeocodeAddress() != null
                     && regeocodeResult.getRegeocodeAddress().getFormatAddress() != null) {
                 currentPositionName = regeocodeResult.getRegeocodeAddress().getFormatAddress();
-                Log.d("Amap", "currentPositionName = " + currentPositionName);
+                Log.d(TAG, "currentPositionName = " + currentPositionName);
             } else {
-                Log.e("Amap", "no result");
+                Log.e(TAG, "no result");
             }
         } else {
-            Log.e("Amap", "rCode=" + rCode);
+            Log.e(TAG, "rCode=" + rCode);
         }
     }
 
@@ -316,5 +345,79 @@ public class MainActivity extends CheckPermissionsActivity implements INaviInfoC
     @Override
     public void onGeocodeSearched(GeocodeResult geocodeResult, int i) {
 
+    }
+
+    @Override
+    public void onGPSClick() {
+        if (!isGpsOpen()) {
+            showToast(getString(R.string.please_open_gps));
+            return;
+        }
+        CameraUpdate cameraUpdate = null;
+        //修改定位图标状态
+        switch (mCurrentGpsState) {
+            case STATE_LOCKED:
+                mZoomLevel = 18;
+                mAnimDuartion = 500;
+                mCurrentGpsState = STATE_ROTATE;
+//                setLocationStyle(MyLocationStyle.LOCATION_TYPE_MAP_ROTATE);
+                mMapType = MyLocationStyle.LOCATION_TYPE_MAP_ROTATE;
+                cameraUpdate =
+                        CameraUpdateFactory.newCameraPosition(new CameraPosition(currentPosition,
+                                mZoomLevel, 30, 0));
+                break;
+            case STATE_UNLOCKED:
+            case STATE_ROTATE:
+                mZoomLevel = 16;
+                mAnimDuartion = 500;
+                mCurrentGpsState = STATE_LOCKED;
+                mMapType = MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER;
+                cameraUpdate =
+                        CameraUpdateFactory.newCameraPosition(new CameraPosition(currentPosition,
+                                mZoomLevel, 0, 0));
+                break;
+        }
+
+        aMap.setMyLocationEnabled(true);
+        Log.d(TAG, "onGPSClick:mCurrentGpsState=" + mCurrentGpsState + ",mMapType=" + mMapType);
+        //改变定位图标状态
+        mGpsView.setGpsState(mCurrentGpsState);
+        //执行地图动效
+        aMap.animateCamera(cameraUpdate, mAnimDuartion, new AMap.CancelableCallback() {
+            @Override
+            public void onFinish() {
+            }
+
+            @Override
+            public void onCancel() {
+
+            }
+        });
+    }
+
+    /**
+     * 是否打开GPS
+     *
+     * @return
+     */
+    private boolean isGpsOpen() {
+        return mLocMgr.isProviderEnabled(LocationManager.GPS_PROVIDER);
+    }
+
+    private void initToast() {
+        mToastView = ((LayoutInflater) this.getSystemService(Context.LAYOUT_INFLATER_SERVICE))
+                .inflate(R.layout.toast_layout, null, false);
+        mTvToast = mToastView.findViewById(R.id.tv_toast);
+    }
+
+    protected void showToast(String text) {
+        if (mToastView == null) {
+            initToast();
+        }
+        Toast toast = Toast.makeText(this, text, Toast.LENGTH_SHORT);
+        mTvToast.setText(text);
+        toast.setView(mToastView);
+        toast.setGravity(Gravity.CENTER, 0, 200);
+        toast.show();
     }
 }

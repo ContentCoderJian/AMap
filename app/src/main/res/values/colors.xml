@@ -12,6 +12,6 @@
     <color name="gray">#ddd</color>
     <color name="darkyellow">#FFCC33</color>
 
-    <color name="gray_black">#88000000</color>
-    <color name="soft_black">#cc000000</color>
+    <color name="gsp_loc_selected">#CCCCCC</color>
+    <color name="toast_text_color">#F2F3F8</color>
 </resources>
