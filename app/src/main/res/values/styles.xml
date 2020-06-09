@@ -8,4 +8,17 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
+    <!--固定在底部的布局样式-->
+    <style name="PoiDetailFixedStyle">
+        <item name="android:layout_height">@dimen/rect_height_medium</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:textColor">@color/white</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingRight">16dp</item>
+        <!-- android:textAppearance="@android:style/TextAppearance.Small"
+         android:textColor="@color/poi_detail_loc"-->
+    </style>
+
 </resources>

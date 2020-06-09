@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.amap.api.maps.TextureMapView
+        android:id="@+id/map"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/white" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="vertical">
+
+        <com.jlv.amap.view.GPSView
+            android:id="@+id/gps_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|right"
+            android:layout_marginStart="@dimen/padding_large"
+            android:layout_marginEnd="@dimen/padding_large"
+            android:layout_marginBottom="@dimen/padding_large"
+            android:background="@drawable/gps_loc_selector"
+            android:src="@drawable/icon_gps_unlocked" />
+
+        <RelativeLayout
+            android:id="@+id/rl_click_poi_detail"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/radius_top_bg"
+            android:padding="@dimen/padding_size"
+            android:visibility="visible">
+
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true">
+
+                <TextView
+                    android:id="@+id/tv_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:gravity="center_vertical"
+                    android:text="我的位置"
+                    android:textAppearance="@android:style/TextAppearance.Large"
+                    android:textColor="@color/poi_detail_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_distance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:layout_below="@+id/tv_title"
+                    android:gravity="center_vertical"
+                    android:text="正在获取位置"
+                    android:textAppearance="@android:style/TextAppearance.Small"
+                    android:textColor="@color/poi_detail_loc" />
+            </RelativeLayout>
+
+            <ImageView
+                android:id="@+id/iv_close"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:background="@drawable/close_selector" />
+
+
+            <TextView
+                android:id="@+id/tv_route"
+                style="@style/PoiDetailFixedStyle"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="20dp"
+                android:layout_toStartOf="@+id/iv_close"
+                android:background="@drawable/rectangle_blue_selector"
+                android:drawableStart="@drawable/poi_indicator_route"
+                android:gravity="center_vertical"
+                android:paddingLeft="20dp"
+                android:paddingRight="20dp"
+                android:text="导航" />
+
+        </RelativeLayout>
+    </LinearLayout>
+
+</RelativeLayout>
