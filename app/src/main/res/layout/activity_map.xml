@@ -135,6 +135,8 @@
                 android:background="@drawable/search_rect_bg"
                 android:drawableStart="@drawable/search_light_icon"
                 android:drawablePadding="10dp"
+                android:lines="1"
+                android:imeOptions="actionSearch"
                 android:hint="搜索目的地"
                 android:padding="@dimen/padding_normal"
                 android:textSize="18dp" />
