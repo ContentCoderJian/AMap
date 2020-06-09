@@ -3,22 +3,26 @@ package com.jlv.amap;
 import android.content.Context;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.Point;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
-import android.view.WindowManager;
+import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.amap.api.location.AMapLocation;
 import com.amap.api.location.AMapLocationClient;
@@ -53,15 +57,22 @@ import com.amap.api.services.geocoder.GeocodeResult;
 import com.amap.api.services.geocoder.GeocodeSearch;
 import com.amap.api.services.geocoder.RegeocodeQuery;
 import com.amap.api.services.geocoder.RegeocodeResult;
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.amap.api.services.help.Inputtips;
+import com.amap.api.services.help.InputtipsQuery;
+import com.amap.api.services.help.Tip;
+import com.jlv.amap.adapter.SearchAdapter;
+import com.jlv.amap.util.InputMethodUtils;
 import com.jlv.amap.view.GPSView;
 
 import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MapActivity extends CheckPermissionsActivity implements INaviInfoCallback,
         AMap.OnMyLocationChangeListener, AMap.OnPOIClickListener,
         AMap.OnMarkerClickListener, GeocodeSearch.OnGeocodeSearchListener,
-        GPSView.OnGPSViewClickListener, LocationSource, AMapLocationListener, AMapGestureListener {
+        GPSView.OnGPSViewClickListener, LocationSource, AMapLocationListener, AMapGestureListener
+        , TextWatcher, Inputtips.InputtipsListener {
     private static final String TAG = "MapActivity";
     private int mCurrentGpsState = STATE_UNLOCKED;//当前定位状态
     private static final int STATE_UNLOCKED = 0;//未定位状态，默认状态
@@ -95,18 +106,30 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     private GPSView mGpsView;
     private View mToastView;
     private TextView mTvToast;
+
+    // poi detail
     private RelativeLayout rlClickPoiDetail;
     private TextView tvClickPoiTitle;
     private TextView tvClickDistance;
     private ImageView ivClickPoiClose;
     private TextView tvRoute;
 
+    // search
+    private TextView tvSearch;
+    private LinearLayout llSearchContainer;
+    private EditText etSearchTips;
+    private ImageView ivSearchBack;
+    private ProgressBar progressBar;
+    private RecyclerView recyclerView;
+    private SearchAdapter mSearchAdapter;
+    // 搜索结果存储
+    private List<Tip> mSearchData = new ArrayList<>();
+
     private String currentPositionName;
     private LatLng currentPosition;
-    private Poi clickPoi;
+    //    private Poi clickPoi;
     private LatLng mClickPoiLatLng;
     private String mClickPoiName;
-    private int mScreenHeight;
 
     private GeocodeSearch geocoderSearch;
     private LocationManager mLocMgr;
@@ -115,14 +138,14 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_map);
-        Log.d(TAG, "onCreate");
+//        Log.d(TAG, "onCreate");
         mLocMgr = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         /*
          * 设置离线地图存储目录，在下载离线地图或初始化地图设置; 使用过程中可自行设置, 若自行设置了离线地图存储的路径，
          * 则需要在离线地图下载和使用地图页面都进行路径设置
          */
         // Demo中为了其他界面可以使用下载的离线地图，使用默认位置存储，屏蔽了自定义设置
-        // MapsInitializer.sdcardDir =OffLineMapUtils.getSdCacheDir(this);
+//         MapsInitializer.sdcardDir =OffLineMapUtils.getSdCacheDir(this);
         textureMapView = findViewById(R.id.map);
         textureMapView.onCreate(savedInstanceState);// 此方法必须重写
         initToast();
@@ -157,16 +180,60 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
                 onGPSClick();
                 AmapNaviParams params = new AmapNaviParams(new Poi(currentPositionName,
                         currentPosition,
-                        ""), null, clickPoi, AmapNaviType.DRIVER);
+                        ""), null, new Poi(mClickPoiName, mClickPoiLatLng, ""),
+                        AmapNaviType.DRIVER);
                 params.setUseInnerVoice(true);
                 AmapNaviPage.getInstance().showRouteActivity(getApplicationContext(), params,
                         MapActivity.this);
             }
         });
+        tvSearch = findViewById(R.id.tv_search);
+        tvSearch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showSearchTipView();
+            }
+        });
+        ivSearchBack = findViewById(R.id.iv_search_back);
+        ivSearchBack.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideSearchTipView();
+            }
+        });
+        llSearchContainer = findViewById(R.id.ll_search_container);
+        llSearchContainer.setVisibility(View.GONE);
+        etSearchTips = findViewById(R.id.et_search_tip);
+        etSearchTips.addTextChangedListener(this);
+        progressBar = findViewById(R.id.progressBar);
+        recyclerView = findViewById(R.id.rv_search);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        // 搜索结果RecyclerView
+        mSearchAdapter = new SearchAdapter(this, mSearchData);
+        mSearchAdapter.setOnItemClickListener(new SearchAdapter.OnItemClickListener() {
+            @Override
+            public void onItemClick(View v, int position) {
+//                Log.d(TAG, "onItemClick, position = " + position);
+                if (mSearchData != null && mSearchData.size() > 0) {
+                    Tip tip = mSearchData.get(position);
+                    if (tip == null) {
+                        return;
+                    }
+                    hideSearchTipView();
+                    mMoveToCenter = false;
+                    isPoiClick = true;
+                    LatLonPoint point = tip.getPoint();
+                    mClickPoiLatLng = new LatLng(point.getLatitude(), point.getLongitude());
+                    addPOIMarderAndShowDetail(mClickPoiLatLng, tip.getName());
+                    showClickPoiDetail(mClickPoiLatLng, tip.getName());
+                }
+            }
+        });
+        recyclerView.setAdapter(mSearchAdapter);
     }
 
     /**
-     * 初始化AMap对象
+     * 初始化AMap对象及监听
      */
     private void initAMap() {
         if (aMap == null) {
@@ -208,7 +275,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     @Override
     protected void onResume() {
         super.onResume();
-        Log.d(TAG, "onResume");
+//        Log.d(TAG, "onResume");
         textureMapView.onResume();
         if (mLocationOption != null && mLocationClient != null) {
             mLocationOption.setInterval(2000);//定位时间间隔，默认2000ms
@@ -220,7 +287,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     @Override
     protected void onPause() {
         super.onPause();
-        Log.d(TAG, "onPause");
+//        Log.d(TAG, "onPause");
         textureMapView.onPause();
         mLocationOption.setInterval(20000);//定位时间间隔，默认2000ms
         mLocationClient.setLocationOption(mLocationOption);
@@ -229,26 +296,20 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     @Override
     protected void onStop() {
         super.onStop();
-        Log.d(TAG, "onStop");
+//        Log.d(TAG, "onStop");
     }
 
-    /**
-     * 方法必须重写
-     */
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        Log.d(TAG, "onSaveInstanceState");
+//        Log.d(TAG, "onSaveInstanceState");
         textureMapView.onSaveInstanceState(outState);
     }
 
-    /**
-     * 方法必须重写
-     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "onDestroy");
+//        Log.d(TAG, "onDestroy");
         textureMapView.onDestroy();
         mFirstLocation = true;
         deactivate();
@@ -367,7 +428,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     @Override
     public void activate(OnLocationChangedListener onLocationChangedListener) {
         mLocationListener = onLocationChangedListener;
-        Log.d(TAG, "activate: mLocationListener = " + mLocationListener + "");
+//        Log.d(TAG, "activate: mLocationListener = " + mLocationListener + "");
         //设置定位回调监听
         if (mLocationClient == null) {
             mLocationClient = new AMapLocationClient(this);
@@ -447,7 +508,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
         //首次定位,选择移动到地图中心点并修改级别到15级
         //首次定位成功才修改地图中心点，并移动
         mAccuracy = location.getAccuracy();
-        Log.d(TAG, "accuracy=" + mAccuracy + ",mFirstLocation=" + mFirstLocation);
+//        Log.d(TAG, "accuracy=" + mAccuracy + ",mFirstLocation=" + mFirstLocation);
         if (mFirstLocation) {
             aMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, mZoomLevel),
                     new AMap.CancelableCallback() {
@@ -476,19 +537,24 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
         }
     }
 
+    /**
+     * unused
+     *
+     * @param location
+     */
     @Override
     public void onMyLocationChange(Location location) {
         // 从location对象中获取经纬度信息，地址描述信息，建议拿到位置之后调用逆地理编码接口获取
-        Log.d(TAG, "onMyLocationChange, mMapType = " + mMapType + "location = " + location);
+//        Log.d(TAG, "onMyLocationChange, mMapType = " + mMapType + "location = " + location);
         currentPosition = new LatLng(location.getLatitude(), location.getLongitude());
         getAddress(new LatLonPoint(location.getLatitude(), location.getLongitude()));
         if (mFirstLocation) {
-            Log.d(TAG, "onMyLocationChange, isFirstLocation.");
+//            Log.d(TAG, "onMyLocationChange, isFirstLocation.");
             aMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentPosition, mZoomLevel),
                     new AMap.CancelableCallback() {
                         @Override
                         public void onFinish() {
-                            Log.d(TAG, "onMyLocationChange, onFinish.");
+//                            Log.d(TAG, "onMyLocationChange, onFinish.");
                             mCurrentGpsState = STATE_LOCKED;
                             mGpsView.setGpsState(mCurrentGpsState);
                             mMapType = MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER;
@@ -519,6 +585,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
 //            // 如果没安装会进入异常，调起下载页面
 //            AMapUtils.getLatestAMapApp(getApplicationContext());
 //        }
+//        // 拉起导航sdk
 //        AmapNaviParams params = new AmapNaviParams(new Poi(currentPositionName, currentPosition,
 //                ""), null, clickPoi, AmapNaviType.DRIVER);
 //        params.setUseInnerVoice(true);
@@ -530,7 +597,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
 
     @Override
     public void onPOIClick(Poi poi) {
-        this.clickPoi = poi;
+//        this.clickPoi = poi;
 //        aMap.clear();
 //        Log.i(TAG, poi.getPoiId() + poi.getName() + ", Coordinate = " + poi.getCoordinate());
 //        mMoveToCenter = false;
@@ -544,7 +611,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
 //        textView.setBackgroundResource(R.drawable.custom_info_bubble);
 //        markOptiopns.icon(BitmapDescriptorFactory.fromView(textView));
 //        aMap.addMarker(markOptiopns);
-        Log.d(TAG, "onPOIClick, poi = " + poi);
+//        Log.d(TAG, "onPOIClick, poi = " + poi);
         if (poi == null || poi.getCoordinate() == null || TextUtils.isEmpty(poi.getName())) {
             return;
         }
@@ -573,7 +640,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
             if (regeocodeResult != null && regeocodeResult.getRegeocodeAddress() != null
                     && regeocodeResult.getRegeocodeAddress().getFormatAddress() != null) {
                 currentPositionName = regeocodeResult.getRegeocodeAddress().getFormatAddress();
-                Log.d(TAG, "currentPositionName = " + currentPositionName);
+//                Log.d(TAG, "currentPositionName = " + currentPositionName);
             } else {
                 Log.e(TAG, "no result");
             }
@@ -623,7 +690,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
         }
 
         aMap.setMyLocationEnabled(true);
-        Log.d(TAG, "onGPSClick:mCurrentGpsState=" + mCurrentGpsState + ",mMapType=" + mMapType);
+//        Log.d(TAG, "onGPSClick:mCurrentGpsState=" + mCurrentGpsState + ",mMapType=" + mMapType);
         //改变定位图标状态
         mGpsView.setGpsState(mCurrentGpsState);
         //执行地图动效
@@ -844,7 +911,7 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
         //避免重复调用闪屏，当手指up才重置为false
         if (!onScrolling) {
             onScrolling = true;
-            Log.d(TAG, "onScroll,x=" + v + ",y=" + v1);
+//            Log.d(TAG, "onScroll,x=" + v + ",y=" + v1);
             //旋转不移动到中心点
             mMapType = MyLocationStyle.LOCATION_TYPE_LOCATION_ROTATE_NO_CENTER;
             mCurrentGpsState = STATE_UNLOCKED;
@@ -877,6 +944,71 @@ public class MapActivity extends CheckPermissionsActivity implements INaviInfoCa
     @Override
     public void onMapStable() {
 
+    }
+
+    @Override
+    public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+    }
+
+    @Override
+    public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+    }
+
+    @Override
+    public void afterTextChanged(Editable s) {
+        if (s == null || TextUtils.isEmpty(s.toString())) {
+            progressBar.setVisibility(View.GONE);
+            return;
+        }
+        String content = s.toString();
+        if (!TextUtils.isEmpty(content) /*&& !TextUtils.isEmpty(mCity)*/) {
+            // 调用高德地图搜索提示api
+            InputtipsQuery inputQuery = new InputtipsQuery(content, mCity);
+            inputQuery.setCityLimit(true);
+            Inputtips inputTips = new Inputtips(this, inputQuery);
+            inputTips.setInputtipsListener(this);
+            inputTips.requestInputtipsAsyn();
+            progressBar.setVisibility(View.VISIBLE);
+        }
+    }
+
+    @Override
+    public void onGetInputtips(List<Tip> list, int i) {
+//        Log.d(TAG, "onGetInputtips, list=" + list + ", i=" + i);
+        progressBar.setVisibility(View.GONE);
+        if (list == null || list.size() == 0) {
+            return;
+        }
+        mSearchData.clear();
+        mSearchData.addAll(list);
+        // 刷新RecycleView
+        mSearchAdapter.notifyDataSetChanged();
+    }
+
+    /**
+     * 隐藏搜索提示布局
+     */
+    private void hideSearchTipView() {
+        InputMethodUtils.hideInput(this);
+        llSearchContainer.setVisibility(View.GONE);
+        etSearchTips.setVisibility(View.VISIBLE);
+        etSearchTips.setFocusable(true);
+        etSearchTips.setFocusableInTouchMode(true);
+        mSearchData.clear();
+        mSearchAdapter.notifyDataSetChanged();
+        etSearchTips.setText("");
+        textureMapView.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * 显示搜索提示布局
+     */
+    private void showSearchTipView() {
+        llSearchContainer.setVisibility(View.VISIBLE);
+        InputMethodUtils.showInput(this, etSearchTips);
+        textureMapView.setVisibility(View.GONE);
     }
 
     /**

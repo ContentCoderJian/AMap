@@ -16,4 +16,5 @@
     <color name="toast_text_color">#F2F3F8</color>
     <color name="poi_detail_loc">#3E3E3E</color>
     <color name="poi_detail_title">#070707</color>
+    <color name="gray_bg">#F4F4F4</color>
 </resources>

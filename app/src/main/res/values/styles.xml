@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -19,6 +19,21 @@
         <item name="android:paddingRight">16dp</item>
         <!-- android:textAppearance="@android:style/TextAppearance.Small"
          android:textColor="@color/poi_detail_loc"-->
+    </style>
+
+    <!--TextView相关样式-->
+    <style name="BaseTextTheme">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="NormalTextTheme.BaseTextTheme" parent="BaseTextTheme">
+        <item name="android:textSize" tools:ignore="SpUsage">16dp</item>
+    </style>
+
+    <style name="SmallTextTheme.BaseTextTheme" parent="BaseTextTheme">
+        <item name="android:textSize" tools:ignore="SpUsage">14dp</item>
     </style>
 
 </resources>

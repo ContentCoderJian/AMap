@@ -7,10 +7,14 @@
     <dimen name="gps_loc_size">60dp</dimen>
     <dimen name="gps_loc_radius">19dp</dimen>
     <dimen name="padding_size">10dp</dimen>
+    <dimen name="padding_normal">10dp</dimen>
+    <dimen name="padding_small">4dp</dimen>
     <dimen name="padding_large">16dp</dimen>
     <dimen name="padding_large2">20dp</dimen>
     <dimen name="setting_item_large_height">62dp</dimen>
     <dimen name="rect_height_medium">54dp</dimen>
     <dimen name="rect_radius_medium">18dp</dimen>
     <dimen name="rect_radius">8dp</dimen>
+    <dimen name="user_detail_rect_circle_text_height">30dp</dimen>
+
 </resources>
